@@ -42,6 +42,29 @@ public class EventoService : IEventoService
 
         return MapearEvento(evento);
     }
+    public async Task<IEnumerable<EventoDto>> ListarPorPersonajeAsync(int personajeId)
+{
+    // Comprobar que el personaje exista
+    var existePersonaje = await _db.Personajes
+        .AnyAsync(p => p.Id == personajeId);
+
+    if (!existePersonaje)
+    {
+        throw new KeyNotFoundException(
+            "El personaje no existe.");
+    }
+
+    // Buscar los eventos en los que participó
+    var eventos = await _db.Eventos
+        .AsNoTracking()
+        .Include(e => e.Participantes)
+        .Include(e => e.Fallecidos)
+        .Where(e => e.Participantes.Any(p => p.Id == personajeId))
+        .OrderBy(e => e.Fecha)
+        .ToListAsync();
+
+    return eventos.Select(MapearEvento).ToList();
+}
 
     public async Task<EventoDto> CrearAsync(EventoCrearDto dto)
     {
@@ -159,6 +182,107 @@ public class EventoService : IEventoService
 
         return MapearEvento(evento);
     }
+    public async Task<SimulacionEventoDto> SimularAsync(int id)
+{
+    // 1. Buscar el evento y cargar sus relaciones
+    var evento = await _db.Eventos
+        .Include(e => e.Participantes)
+        .Include(e => e.Fallecidos)
+        .FirstOrDefaultAsync(e => e.Id == id);
+
+    if (evento is null)
+    {
+        throw new KeyNotFoundException("El evento no existe.");
+    }
+
+    // 2. Validar cantidad de participantes
+    if (evento.Participantes.Count < 2)
+    {
+        throw new ArgumentException(
+            "El evento debe tener al menos 2 participantes.");
+    }
+
+    // 3. Comprobar que ningún participante haya fallecido
+    if (evento.Participantes.Any(p => p.Estado == Estado.Muerto))
+    {
+        throw new InvalidOperationException(
+            "Un personaje fallecido no puede participar en una simulación.");
+    }
+
+    // 4. Obtener las Cards de los participantes
+    var participantesIds = evento.Participantes
+        .Select(p => p.Id)
+        .ToList();
+
+    var cards = await _db.CardsPersonaje
+        .Where(c => participantesIds.Contains(c.PersonajeId))
+        .ToListAsync();
+
+    if (cards.Count != evento.Participantes.Count)
+    {
+        throw new ArgumentException(
+            "Todos los participantes deben tener una card.");
+    }
+
+    // 5. Calcular el poder total por facción
+    var poderesPorFaccion = evento.Participantes
+        .GroupBy(p => p.Faccion)
+        .ToDictionary(
+            grupo => grupo.Key,
+            grupo => grupo.Sum(p =>
+                cards.First(c => c.PersonajeId == p.Id).Poder)
+        );
+
+    // 6. Aplicar un factor aleatorio entre 90% y 110%
+    var random = Random.Shared;
+
+    var poderesFinales = poderesPorFaccion.ToDictionary(
+        x => x.Key,
+        x => x.Value * (random.Next(90, 111) / 100.0)
+    );
+
+    // 7. Determinar la facción ganadora
+    var ganador = poderesFinales
+        .OrderByDescending(x => x.Value)
+        .ThenBy(x => (int)x.Key)
+        .First();
+
+    // 8. Los participantes de las facciones perdedoras fallecen
+    var fallecidos = evento.Participantes
+        .Where(p => p.Faccion != ganador.Key)
+        .ToList();
+
+    foreach (var personaje in fallecidos)
+    {
+        personaje.Estado = Estado.Muerto;
+        evento.Fallecidos.Add(personaje);
+    }
+
+    // 9. Guardar el resultado
+    evento.Resultado =
+        $"Ganó la facción {ganador.Key} con un poder de {ganador.Value:F2}. " +
+        $"Fallecieron {fallecidos.Count} personajes.";
+
+    await _db.SaveChangesAsync();
+
+    // 10. Construir la respuesta
+    return new SimulacionEventoDto
+    {
+        Evento = evento.Nombre,
+        PoderPorFaccion = poderesFinales.ToDictionary(
+            x => x.Key.ToString(),
+            x => x.Value
+        ),
+        Ganador = ganador.Key.ToString(),
+        PoderGanador = ganador.Value,
+        Fallecidos = fallecidos.Select(p => new PersonajeResumenDto
+        {
+            Id = p.Id,
+            Nombre = p.Nombre,
+            Estado = p.Estado
+        }).ToList()
+    };
+}
 
     private static EventoDto MapearEvento(Evento evento)
     {

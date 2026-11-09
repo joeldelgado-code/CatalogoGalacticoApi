@@ -13,10 +13,20 @@ public class PersonajeService : IPersonajeService
     {
         _db = db;
     }
-    public async Task<IEnumerable<PersonajeDto>> ListarAsync()
+    public async Task<IEnumerable<PersonajeDto>> ListarAsync(Faccion? faccion, bool? fuerzaSensitivo)
     {
-        return await _db.Personajes
-            .AsNoTracking()
+        var consulta = _db.Personajes.AsNoTracking();
+
+        if (faccion.HasValue)
+        {
+            consulta = consulta.Where(p => p.Faccion == faccion.Value);
+        }
+
+        if (fuerzaSensitivo.HasValue)
+        {
+            consulta = consulta.Where(p => p.FuerzaSensitivo == fuerzaSensitivo.Value);
+        }
+        return await consulta
             .OrderBy(p => p.Id)
             .Select(p => new PersonajeDto
             {
@@ -92,4 +102,21 @@ public class PersonajeService : IPersonajeService
 
         return true;
     }
+    public async Task<IEnumerable<PersonajeRankingDto>> ObtenerRankingPorPoderAsync()
+{
+    var ranking = await _db.Personajes
+        .AsNoTracking()
+        .Select(p => new PersonajeRankingDto
+        {
+            Personaje = p.Nombre,
+            Poder = _db.CardsPersonaje
+                .Where(c => c.PersonajeId == p.Id)
+                .Select(c => (int?)c.Poder)
+                .FirstOrDefault() ?? 0
+        })
+        .OrderByDescending(p => p.Poder)
+        .ToListAsync();
+
+    return ranking;
+}
 }
