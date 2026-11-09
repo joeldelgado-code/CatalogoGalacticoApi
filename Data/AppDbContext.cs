@@ -49,7 +49,7 @@ public class AppDbContext : DbContext
                 .HasMaxLength(1000);
 
             // Relación 1:1 con Personaje
-            e.HasOne<Personaje>()
+            e.HasOne(c => c.Personaje)
                 .WithOne()
                 .HasForeignKey<CardPersonaje>(c => c.PersonajeId)
                 .OnDelete(DeleteBehavior.Restrict);
