@@ -20,7 +20,6 @@ public class CardsPersonajeController : ControllerBase
     public async Task<ActionResult<IEnumerable<CardPersonajeDto>>> Listar()
     {
         var cards = await _cardService.ListarAsync();
-
         return Ok(cards);
     }
 

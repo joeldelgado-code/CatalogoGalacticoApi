@@ -62,4 +62,25 @@ public class EventosController : ControllerBase
             return Conflict(new { mensaje = ex.Message });
         }
     }
+    [HttpPost("{id:int}/simular")]
+public async Task<ActionResult<SimulacionEventoDto>> Simular(int id)
+{
+    try
+    {
+        var resultado = await _eventoService.SimularAsync(id);
+        return Ok(resultado);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(new { mensaje = ex.Message });
+    }
+    catch (ArgumentException ex)
+    {
+        return BadRequest(new { mensaje = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Conflict(new { mensaje = ex.Message });
+    }
+}
 }
