@@ -67,6 +67,39 @@ namespace CatalogoGalacticoApi.Migrations
                     b.ToTable("CardsPersonaje");
                 });
 
+            modelBuilder.Entity("CatalogoGalacticoApi.Models.EstadisticaPersonaje", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("EventoFallecimientoId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EventosParticipados")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EventosSobrevividos")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PersonajeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UltimaActualizacion")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventoFallecimientoId");
+
+                    b.HasIndex("PersonajeId")
+                        .IsUnique();
+
+                    b.ToTable("EstadisticasPersonajes");
+                });
+
             modelBuilder.Entity("CatalogoGalacticoApi.Models.Evento", b =>
                 {
                     b.Property<int>("Id")
@@ -92,6 +125,9 @@ namespace CatalogoGalacticoApi.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
+
+                    b.Property<bool>("Simulado")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Ubicacion")
                         .IsRequired()
@@ -182,6 +218,24 @@ namespace CatalogoGalacticoApi.Migrations
                     b.Navigation("Personaje");
                 });
 
+            modelBuilder.Entity("CatalogoGalacticoApi.Models.EstadisticaPersonaje", b =>
+                {
+                    b.HasOne("CatalogoGalacticoApi.Models.Evento", "EventoFallecimiento")
+                        .WithMany()
+                        .HasForeignKey("EventoFallecimientoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CatalogoGalacticoApi.Models.Personaje", "Personaje")
+                        .WithOne("Estadistica")
+                        .HasForeignKey("CatalogoGalacticoApi.Models.EstadisticaPersonaje", "PersonajeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EventoFallecimiento");
+
+                    b.Navigation("Personaje");
+                });
+
             modelBuilder.Entity("EventoFallecido", b =>
                 {
                     b.HasOne("CatalogoGalacticoApi.Models.Evento", null)
@@ -210,6 +264,11 @@ namespace CatalogoGalacticoApi.Migrations
                         .HasForeignKey("PersonajeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CatalogoGalacticoApi.Models.Personaje", b =>
+                {
+                    b.Navigation("Estadistica");
                 });
 #pragma warning restore 612, 618
         }

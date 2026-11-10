@@ -15,6 +15,7 @@ public class Personaje
     public Estado Estado { get; set; }= Estado.Vivo;
 
     public bool FuerzaSensitivo { get; set; }
+    public EstadisticaPersonaje? Estadistica { get; set; }
 }
 public enum Faccion
 {

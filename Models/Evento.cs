@@ -15,4 +15,6 @@ public class Evento
     public List<Personaje> Participantes { get; set; } = new();
     public List<Personaje> Fallecidos { get; set; } = new();
     public string Resultado { get; set; } = string.Empty;
+    public bool Simulado { get; set; } = false;
+    
 }

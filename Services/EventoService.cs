@@ -66,6 +66,7 @@ public class EventoService : IEventoService
     return eventos.Select(MapearEvento).ToList();
 }
 
+    
     public async Task<EventoDto> CrearAsync(EventoCrearDto dto)
     {
         // Validar que exista al menos un participante
@@ -93,8 +94,9 @@ public class EventoService : IEventoService
                 "Todos los fallecidos deben ser participantes del evento.");
         }
 
-        // Obtener los participantes desde la base de datos
+        // Obtener participantes y sus estadísticas
         var participantes = await _db.Personajes
+            .Include(p => p.Estadistica)
             .Where(p => dto.ParticipantesIds.Contains(p.Id))
             .ToListAsync();
 
@@ -108,7 +110,7 @@ public class EventoService : IEventoService
         var fallecidosIds = dto.FallecidosIds;
 
         // Comprobar que ningún participante haya fallecido
-        // en un evento anterior o en otro evento de la misma fecha.
+        // en un evento anterior o en otro evento de la misma fecha
         var existeFallecidoAnterior = await _db.Eventos
             .AnyAsync(e =>
                 e.Fecha <= dto.Fecha
@@ -122,7 +124,7 @@ public class EventoService : IEventoService
         }
 
         // Comprobar que los fallecidos no tengan
-        // una participación en un evento posterior.
+        // una participación en un evento posterior
         var existeParticipacionPosterior = await _db.Eventos
             .AnyAsync(e =>
                 e.Fecha >= dto.Fecha
@@ -136,7 +138,7 @@ public class EventoService : IEventoService
         }
 
         // Comprobar que ninguno de los fallecidos
-        // haya fallecido anteriormente en otro evento.
+        // haya fallecido anteriormente en otro evento
         var yaFallecio = await _db.Eventos
             .AnyAsync(e =>
                 e.Fallecidos.Any(
@@ -148,16 +150,17 @@ public class EventoService : IEventoService
                 "Un personaje no puede fallecer más de una vez.");
         }
 
+        // Verificar que todos tengan estadísticas
+        if (participantes.Any(p => p.Estadistica is null))
+        {
+            throw new InvalidOperationException(
+                "Uno o más personajes no tienen estadísticas registradas.");
+        }
+
         // Obtener los personajes fallecidos
         var fallecidos = participantes
             .Where(p => fallecidosIds.Contains(p.Id))
             .ToList();
-
-        // Actualizar el estado de los fallecidos
-        foreach (var personaje in fallecidos)
-        {
-            personaje.Estado = Estado.Muerto;
-        }
 
         // Generar el resultado del evento
         string resultado = fallecidos.Count > 0
@@ -176,17 +179,40 @@ public class EventoService : IEventoService
             Resultado = resultado
         };
 
+        // Actualizar estadísticas de los participantes
+        foreach (var personaje in participantes)
+        {
+            var estadisticas = personaje.Estadistica!;
+
+            estadisticas.EventosParticipados++;
+
+            if (fallecidosIds.Contains(personaje.Id))
+            {
+                personaje.Estado = Estado.Muerto;
+                estadisticas.EventoFallecimiento = evento;
+            }
+            else
+            {
+                estadisticas.EventosSobrevividos++;
+            }
+
+            estadisticas.UltimaActualizacion = DateTime.UtcNow;
+        }
+
         _db.Eventos.Add(evento);
 
         await _db.SaveChangesAsync();
 
         return MapearEvento(evento);
     }
-    public async Task<SimulacionEventoDto> SimularAsync(int id)
+
+    
+public async Task<SimulacionEventoDto> SimularAsync(int id)
 {
     // 1. Buscar el evento y cargar sus relaciones
     var evento = await _db.Eventos
         .Include(e => e.Participantes)
+            .ThenInclude(p => p.Estadistica)
         .Include(e => e.Fallecidos)
         .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -195,21 +221,35 @@ public class EventoService : IEventoService
         throw new KeyNotFoundException("El evento no existe.");
     }
 
-    // 2. Validar cantidad de participantes
+    // 2. Evitar simulaciones repetidas
+    if (evento.Simulado)
+    {
+        throw new InvalidOperationException(
+            "Este evento ya fue simulado.");
+    }
+
+    // 3. Validar cantidad de participantes
     if (evento.Participantes.Count < 2)
     {
         throw new ArgumentException(
             "El evento debe tener al menos 2 participantes.");
     }
 
-    // 3. Comprobar que ningún participante haya fallecido
+    // 4. Comprobar que ningún participante haya fallecido
     if (evento.Participantes.Any(p => p.Estado == Estado.Muerto))
     {
         throw new InvalidOperationException(
             "Un personaje fallecido no puede participar en una simulación.");
     }
 
-    // 4. Obtener las Cards de los participantes
+    // 5. Verificar que todos tengan estadísticas
+    if (evento.Participantes.Any(p => p.Estadistica is null))
+    {
+        throw new InvalidOperationException(
+            "Uno o más personajes no tienen estadísticas registradas.");
+    }
+
+    // 6. Obtener las Cards de los participantes
     var participantesIds = evento.Participantes
         .Select(p => p.Id)
         .ToList();
@@ -224,7 +264,7 @@ public class EventoService : IEventoService
             "Todos los participantes deben tener una card.");
     }
 
-    // 5. Calcular el poder total por facción
+    // 7. Calcular el poder total por facción
     var poderesPorFaccion = evento.Participantes
         .GroupBy(p => p.Faccion)
         .ToDictionary(
@@ -233,7 +273,7 @@ public class EventoService : IEventoService
                 cards.First(c => c.PersonajeId == p.Id).Poder)
         );
 
-    // 6. Aplicar un factor aleatorio entre 90% y 110%
+    // 8. Aplicar un factor aleatorio entre 90% y 110%
     var random = Random.Shared;
 
     var poderesFinales = poderesPorFaccion.ToDictionary(
@@ -241,13 +281,13 @@ public class EventoService : IEventoService
         x => x.Value * (random.Next(90, 111) / 100.0)
     );
 
-    // 7. Determinar la facción ganadora
+    // 9. Determinar la facción ganadora
     var ganador = poderesFinales
         .OrderByDescending(x => x.Value)
         .ThenBy(x => (int)x.Key)
         .First();
 
-    // 8. Los participantes de las facciones perdedoras fallecen
+    // 10. Los participantes de las facciones perdedoras fallecen
     var fallecidos = evento.Participantes
         .Where(p => p.Faccion != ganador.Key)
         .ToList();
@@ -255,17 +295,30 @@ public class EventoService : IEventoService
     foreach (var personaje in fallecidos)
     {
         personaje.Estado = Estado.Muerto;
+
         evento.Fallecidos.Add(personaje);
+
+        var estadisticas = personaje.Estadistica!;
+
+        // Ya no sobrevivió a este evento
+        estadisticas.EventosSobrevividos--;
+
+        // Registrar el evento de fallecimiento
+        estadisticas.EventoFallecimiento = evento;
+
+        estadisticas.UltimaActualizacion = DateTime.UtcNow;
     }
 
-    // 9. Guardar el resultado
+    // 11. Guardar el resultado y marcar el evento como simulado
     evento.Resultado =
         $"Ganó la facción {ganador.Key} con un poder de {ganador.Value:F2}. " +
         $"Fallecieron {fallecidos.Count} personajes.";
 
+    evento.Simulado = true;
+
     await _db.SaveChangesAsync();
 
-    // 10. Construir la respuesta
+    // 12. Construir la respuesta
     return new SimulacionEventoDto
     {
         Evento = evento.Nombre,
@@ -283,6 +336,7 @@ public class EventoService : IEventoService
         }).ToList()
     };
 }
+
 
     private static EventoDto MapearEvento(Evento evento)
     {
