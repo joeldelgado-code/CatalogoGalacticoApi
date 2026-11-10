@@ -68,8 +68,17 @@ public class PersonajeService : IPersonajeService
             Estado = Estado.Vivo,
             FuerzaSensitivo = dto.FuerzaSensitivo
         };
+        var estadisticas = new EstadisticaPersonaje
+        {
+            Personaje = personaje,
+            EventosParticipados = 0,
+            EventosSobrevividos = 0,
+            EventoFallecimientoId = null,
+            UltimaActualizacion = DateTime.UtcNow
+        };
 
         _db.Personajes.Add(personaje);
+        _db.EstadisticasPersonajes.Add(estadisticas);
         await _db.SaveChangesAsync();
 
         return new PersonajeDto

@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Personaje> Personajes => Set<Personaje>();
     public DbSet<CardPersonaje> CardsPersonaje => Set<CardPersonaje>();
     public DbSet<Evento> Eventos => Set<Evento>();
+    public DbSet<EstadisticaPersonaje> EstadisticasPersonajes => Set<EstadisticaPersonaje>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,7 +30,19 @@ public class AppDbContext : DbContext
             e.Property(p => p.Faccion).IsRequired();
             e.Property(p => p.Estado).IsRequired();
         });
+        // ESTADISTICA PERSONAJE
+        modelBuilder.Entity<EstadisticaPersonaje>(e =>
+        {
+            e.HasOne(ep => ep.Personaje)
+                .WithOne(p => p.Estadistica)
+                .HasForeignKey<EstadisticaPersonaje>(ep => ep.PersonajeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
+            e.HasOne(ep => ep.EventoFallecimiento)
+                .WithMany()
+                .HasForeignKey(ep => ep.EventoFallecimientoId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
          // CARD PERSONAJE
         modelBuilder.Entity<CardPersonaje>(e =>
         {
