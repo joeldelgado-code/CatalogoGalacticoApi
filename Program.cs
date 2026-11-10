@@ -25,6 +25,7 @@ builder.Services.AddScoped<IPersonajeService, PersonajeService>();
 builder.Services.AddScoped<ICardPersonajeService, CardPersonajeService>();
 builder.Services.AddScoped<IEventoService, EventoService>();
 builder.Services.AddSingleton<ICifradoService, CifradoService>();
+builder.Services.AddScoped<IEstadisticaPersonajeService, EstadisticaPersonajeService>();
 
 var app = builder.Build();
 
